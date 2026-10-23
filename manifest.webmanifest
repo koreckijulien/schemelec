@@ -1,0 +1,28 @@
+{
+  "id": "./index.html",
+  "name": "Schémas électrotechniques - Schemelec",
+  "short_name": "Schemelec",
+  "description": "Éditeur et simulateur de schémas électrotechniques.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e6ebef",
+  "theme_color": "#e6ebef",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
