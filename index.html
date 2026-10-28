@@ -1552,11 +1552,16 @@
         const an = Math.abs(ro[0]) >= 3 ? (ro[0] > 0 ? 'start' : 'end') : 'middle';
         txt.push(`<text class="tl" x="${q[0]}" y="${q[1]}" text-anchor="${an}">${esc(l)}</text>`);
       });
-      const rb = cbRel(c), lab = dispLabel(c);
+      const rb = bb, lab = dispLabel(c);
       const miss = D.refLabel && !lab;
-      const right = LABEL_RIGHT.has(c.type), lx = right ? rb[2] + 4 - 0.3 * (rb[2] - rb[0]) + (c.type === 'lamp' ? 5 : 0) : rb[0] - 4, la = right ? 'start' : 'end';
-      if (lab || miss) txt.push(`<text class="cl${miss ? ' miss' : ''}" x="${lx}" y="${(rb[1] + rb[3]) / 2}" text-anchor="${la}">${esc(miss ? '?' : lab)}</text>`);
-      if (c.note) txt.push(`<text class="cn" x="${lx}" y="${(rb[1] + rb[3]) / 2 + 11}" text-anchor="${la}">${esc(c.note)}</text>`);
+      const right = LABEL_RIGHT.has(c.type), lx = right ? rb[2] + 4 - 0.3 * (rb[2] - rb[0]) + (c.type === 'lamp' ? 5 : 0) : rb[0] - 4;
+      // Le repère suit la position du composant tourné, mais le texte reste horizontal et lisible.
+      const lp = rotPt(lx, (rb[1] + rb[3]) / 2, c.rot), rd = rotPt(right ? 1 : -1, 0, c.rot);
+      const lan = rd[0] > 0 ? 'start' : rd[0] < 0 ? 'end' : 'middle';
+      const ly = rd[1] > 0 ? lp[1] + 10 : rd[1] < 0 ? lp[1] - 4 : lp[1];
+      const ny = rd[1] < 0 ? ly - 11 : ly + 11;
+      if (lab || miss) txt.push(`<text class="cl${miss ? ' miss' : ''}" x="${lp[0]}" y="${ly}" text-anchor="${lan}">${esc(miss ? '?' : lab)}</text>`);
+      if (c.note) txt.push(`<text class="cn" x="${lp[0]}" y="${ny}" text-anchor="${lan}">${esc(c.note)}</text>`);
       return s + txt.join('') + '</g>';
     }
 
