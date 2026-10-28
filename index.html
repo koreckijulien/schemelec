@@ -1414,7 +1414,7 @@
     /* ===== Modèle ===== */
     let doc = { comps: [], wires: [], nid: 1 };
     const WIRE_COLORS = { blue: '#2563eb', red: '#dc2626', black: '#000000', violet: '#7c3aed', green: '#16803c', yellow: '#d4a900' };
-    const WIRE_COLOR_OPTIONS = [['blue', 'Bleu'], ['red', 'Rouge'], ['black', 'Noir'], ['violet', 'Violet'], ['green', 'Vert'], ['yellow', 'Jaune']];
+    const WIRE_COLOR_OPTIONS = [['blue', '🟦 Bleu'], ['red', '🟥 Rouge'], ['black', '⬛ Noir'], ['violet', '🟪 Violet'], ['green', '🟩 Vert'], ['yellow', '🟨 Jaune']];
     const wireStrokeColor = w => Object.prototype.hasOwnProperty.call(WIRE_COLORS, w.color) ? WIRE_COLORS[w.color] : '';
     let view = { x: 60, y: 50, k: 1 };
     let selC = new Set(), selW = null;
@@ -2098,7 +2098,7 @@
           const A = byId(w.a.c), B = byId(w.b.c);
           h = `<h2>Fil</h2><p class="empty" style="margin:0">${esc(dispLabel(A) || DEFS[A.type].name)} · borne ${esc(w.a.t)} → ${esc(dispLabel(B) || DEFS[B.type].name)} · borne ${esc(w.b.t)}</p>
       ${field('Repère du fil', `<input id="wlab" value="${esc(w.label)}" placeholder="ex. 1, L1, 12…" autocomplete="off">`)}
-      ${field('Couleur', `<select id="wcolor"><option value=""${wireStrokeColor(w) ? '' : ' selected'}>Par défaut</option>${WIRE_COLOR_OPTIONS.map(([value, label]) => `<option value="${value}"${w.color === value ? ' selected' : ''}>${label}</option>`).join('')}</select>`)}
+      ${field('Couleur', `<select id="wcolor"><option value=""${wireStrokeColor(w) ? '' : ' selected'}>▫️ Par défaut</option>${WIRE_COLOR_OPTIONS.map(([value, label]) => `<option value="${value}"${w.color === value ? ' selected' : ''}>${label}</option>`).join('')}</select>`)}
       <div class="row"><button class="tb" id="wauto" type="button">Repère automatique</button><button class="tb" id="wdel" type="button">Supprimer le fil</button></div>
       <p class="empty">Faites glisser le carré orange pour déplacer le segment central du fil.</p>`;
         }
