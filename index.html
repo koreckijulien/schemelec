@@ -1251,8 +1251,8 @@
       bbox: c => [-34, -2, 34, 62],
       draw(c, cx) {
         const pos = cx && cx.sim ? (cx.S.pos[c.id] | 0) : 0;
-        const target = pos ? 12 : -12;
-        return { s: ln(0, 0, 0, 40) + ln(-12, 20, -20, 60) + ln(12, 20, 20, 60) + ci(-12, 20, 2) + ci(12, 20, 2) + ln(0, 40, target, 20), t: [] };
+        const target = pos ? 20 : -20;
+        return { s: ln(0, 0, 0, 20) + ln(-20, 46, -20, 60) + ln(20, 46, 20, 60) + ln(0, 20, target, 46), t: [] };
       }
     };
 
