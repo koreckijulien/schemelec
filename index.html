@@ -1236,6 +1236,25 @@
     DEFS.estop = btnDef('Arrêt d’urgence', pa('M-15,22 A8,8 0 0 0 -15,38 Z'), 'S', 'nc', { props: [] });
     DEFS.sel = btnDef('Sélecteur 2 positions', ln(-14, 30, -24, 21) + ci(-14, 30, 2.2), 'S', 'no');
     DEFS.lsw = btnDef('Fin de course', ci(-18, 30, 4), 'B', 'no');
+    DEFS.inter = {
+      name: 'Interrupteur simple', pre: 'S', def: {}, props: [],
+      terms: c => [{ id: 'a', x: 0, y: 0, d: [0, -1], l: '1' }, { id: 'b', x: 0, y: 60, d: [0, 1], l: '2' }],
+      bbox: c => [-30, -2, 16, 62],
+      draw(c, cx) {
+        const on = cx && cx.sim ? !!cx.S.latch[c.id] : false;
+        return { s: ln(0, 0, 0, 20) + ln(0, 40, 0, 60) + blade(0, on, false) + ln(-4, 30, -14, 30, 'dash') + ln(-14, 30, -20, 22) + ci(-14, 30, 2.2), t: [] };
+      }
+    };
+    DEFS.vaetvient = {
+      name: 'Interrupteur va-et-vient', pre: 'S', def: {}, props: [],
+      terms: c => [{ id: 'com', x: 0, y: 0, d: [0, -1], l: 'L' }, { id: 'nav1', x: -20, y: 60, d: [0, 1], l: '1' }, { id: 'nav2', x: 20, y: 60, d: [0, 1], l: '2' }],
+      bbox: c => [-34, -2, 34, 62],
+      draw(c, cx) {
+        const pos = cx && cx.sim ? (cx.S.pos[c.id] | 0) : 0;
+        const target = pos ? 12 : -12;
+        return { s: ln(0, 0, 0, 40) + ln(-12, 20, -20, 60) + ln(12, 20, 20, 60) + ci(-12, 20, 2) + ci(12, 20, 2) + ln(0, 40, target, 20), t: [] };
+      }
+    };
 
     /* Sélecteur 3 positions : deux contacts NO (gauche / droite) */
     DEFS.sel3 = {
@@ -1380,6 +1399,7 @@
       ['Puissance', [{ t: 'kmp', name: 'Contacts de puissance' }]],
       ['Commande', [
         { t: 'btn', name: 'Bouton marche (NO)', p: { type: 'no' } }, { t: 'btn', name: 'Bouton arrêt (NC)', p: { type: 'nc' } },
+        { t: 'inter', name: 'Interrupteur simple' }, { t: 'vaetvient', name: 'Interrupteur va-et-vient' },
         { t: 'estop', name: 'Arrêt d’urgence' }, { t: 'sel', name: 'Sélecteur 2 positions' }, { t: 'sel3', name: 'Sélecteur 3 positions' }, { t: 'lsw', name: 'Fin de course' }]],
       ['Contacts auxiliaires', [
         { t: 'ctc', name: 'Contact auxiliaire NO', p: { kind: 'aux', type: 'no' } }, { t: 'ctc', name: 'Contact auxiliaire NC', p: { kind: 'aux', type: 'nc' } },
@@ -1685,6 +1705,8 @@
           return [{ a: 'a', b: 'b', on }];
         }
         case 'btn': case 'sel': case 'lsw': { const pr = !!(S.held[c.id] || S.latch[c.id]); return [{ a: 'a', b: 'b', on: P.type === 'nc' ? !pr : pr }]; }
+        case 'inter': return [{ a: 'a', b: 'b', on: !!S.latch[c.id] }];
+        case 'vaetvient': { const pos = S.pos[c.id] | 0; return [{ a: 'com', b: 'nav1', on: pos === 0 }, { a: 'com', b: 'nav2', on: pos === 1 }]; }
         case 'estop': return [{ a: 'a', b: 'b', on: !S.latch[c.id] }];
         case 'sel3': { const p = S.pos[c.id] | 0; return [{ a: 'a1', b: 'b1', on: p === 1 }, { a: 'a2', b: 'b2', on: p === 2 }]; }
         case 'bornier': return [{ a: 'a', b: 'b', on: true }];
@@ -1820,7 +1842,7 @@
     }
 
     /* ===== Actions de l'opérateur ===== */
-    const OPS = ['btn', 'estop', 'sel', 'sel3', 'lsw', 'sect', 'disj', 'disjmot', 'diff', 'fuse', 'thermal'];
+    const OPS = ['btn', 'estop', 'sel', 'sel3', 'lsw', 'inter', 'vaetvient', 'sect', 'disj', 'disjmot', 'diff', 'fuse', 'thermal'];
     // Indique si un composant peut être actionné depuis la simulation.
     const isOperator = c => OPS.includes(c.type);
     let heldId = null;
@@ -1830,6 +1852,8 @@
       switch (c.type) {
         case 'btn': if (shift) S.latch[id] = !S.latch[id]; else { S.held[id] = true; heldId = id; } break;
         case 'estop': case 'sel': case 'lsw': S.latch[id] = !S.latch[id]; break;
+        case 'inter': S.latch[id] = !S.latch[id]; break;
+        case 'vaetvient': S.pos[id] = 1 - (S.pos[id] | 0); break;
         case 'sel3': S.pos[id] = ((S.pos[id] | 0) + 1) % 3; break;
         case 'sect': case 'disj': case 'disjmot': case 'diff': S.sw[id] = !(S.sw[id] !== false); break;
         case 'fuse': S.blown[id] = !S.blown[id]; break;
@@ -2027,6 +2051,8 @@
           case 'btn': { const on = S.held[c.id] || S.latch[c.id]; st = `<span class="chip${on ? ' on' : ''}">${on ? 'actionné' : 'repos'}</span>`; btn = `<button class="cbtn${on ? ' act' : ''}" type="button" data-op="${c.id}" data-kind="hold">Appuyer</button>`; break; }
           case 'estop': st = `<span class="chip${S.latch[c.id] ? ' bad' : ''}">${S.latch[c.id] ? 'enfoncé' : 'déverrouillé'}</span>`; btn = `<button class="cbtn" type="button" data-op="${c.id}" data-kind="toggle">${S.latch[c.id] ? 'Déverrouiller' : 'Enfoncer'}</button>`; break;
           case 'sel': case 'lsw': st = `<span class="chip${S.latch[c.id] ? ' on' : ''}">${S.latch[c.id] ? 'actionné' : 'repos'}</span>`; btn = `<button class="cbtn" type="button" data-op="${c.id}" data-kind="toggle">Basculer</button>`; break;
+          case 'inter': { const on = !!S.latch[c.id]; st = `<span class="chip${on ? ' on' : ''}">${on ? 'fermé' : 'ouvert'}</span>`; btn = `<button class="cbtn" type="button" data-op="${c.id}" data-kind="toggle">Basculer</button>`; break; }
+          case 'vaetvient': { const pos = S.pos[c.id] | 0; st = `<span class="chip on">position ${pos + 1}</span>`; btn = `<button class="cbtn" type="button" data-op="${c.id}" data-kind="toggle">Basculer</button>`; break; }
           case 'sel3': { const p = S.pos[c.id] | 0; st = ''; btn = `<span class="pos3">${['G', '0', 'D'].map((l, i) => `<button type="button" data-op="${c.id}" data-pos="${[1, 0, 2][i]}" class="${p === [1, 0, 2][i] ? 'on' : ''}">${l}</button>`).join('')}</span>`; break; }
           case 'fuse': { const b = S.blown[c.id]; st = `<span class="chip${b ? ' bad' : ''}">${b ? 'fondu' : 'en service'}</span>`; btn = `<button class="cbtn" type="button" data-op="${c.id}" data-kind="toggle">${b ? 'Remplacer' : 'Faire fondre'}</button>`; break; }
           case 'thermal': { const t = S.trip[c.id]; st = `<span class="chip${t ? ' bad' : ''}">${t ? 'déclenché' : 'armé'}</span>`; btn = `<button class="cbtn" type="button" data-op="${c.id}" data-kind="toggle">${t ? 'Réarmer' : 'Simuler surcharge'}</button>`; break; }
