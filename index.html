@@ -804,6 +804,9 @@
       stroke-dasharray: 4 3
     }
 
+    .mh.add {
+      opacity: .6;
+    }
     .mh {
       fill: var(--paper);
       stroke: var(--sel);
@@ -1437,7 +1440,7 @@
     let view = { x: 60, y: 50, k: 1 };
     let selC = new Set(), selW = null;
     let gridVisible = true;
-    let mode = 'edit', tool = null, ghost = null, drag = null, wiring = null, hoverT = null;
+    let mode = 'edit', tool = null, ghost = null, drag = null, wiring = null, hoverT = null, lastViaClick = { t: 0, k: '' };
     let undoS = [], redoS = [];
     let TC = new Map();
     const svg = $('#cv');
@@ -1518,7 +1521,7 @@
         pts.push(sb);
       }
       pts.push([B.x, B.y]);
-      return { pts: cleanPts(pts), mid };
+      return { pts: cleanPts(pts), mid: (w.via && w.via.length) ? null : mid, stubs: [sa, sb] };
     }
     // Convertit une liste de points en commandes de tracé SVG.
     const ptsD = p => p.map((q, i) => (i ? 'L' : 'M') + q[0] + ' ' + q[1]).join(' ');
@@ -1588,6 +1591,13 @@
         s += `<g data-w="${w.id}"><path class="wirehit" d="${d}"/><path class="wire${isSel ? ' sel' : ''}${live}" d="${d}"${col}/>`;
         if (w.label) { const ls = labelSpot(p.pts); s += `<text class="wl" x="${ls.x}" y="${ls.y}" text-anchor="${ls.a}">${esc(w.label)}</text>`; }
         s += '</g>';
+        if (isSel && !sim) {
+          if (w.via && w.via.length) w.via.forEach((q, i) => { hs += `<circle class="mh" data-via="${w.id}" data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="5"/>`; });
+          for (let i = 1; i < p.pts.length - 2; i++) {
+            const a = p.pts[i], b = p.pts[i + 1];
+            if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) >= 20) hs += `<circle class="mh add" data-addvia="${w.id}" data-seg="${i}" cx="${(a[0] + b[0]) / 2}" cy="${(a[1] + b[1]) / 2}" r="3.5"/>`;
+          }
+        }
         if (isSel && p.mid && !sim) { hs += p.mid.ax === 'v' ? `<rect class="mh" data-mid="${w.id}" x="${p.mid.x - 5}" y="${p.mid.pos - 5}" width="10" height="10"/>` : `<rect class="mh" data-mid="${w.id}" x="${p.mid.pos - 5}" y="${p.mid.y - 5}" width="10" height="10"/>`; }
       });
       Object.keys(cnt).forEach(k => { if (cnt[k] >= 2) { const [ci_, ti] = k.split(':'); const t = tAbs({ c: ci_, t: ti }); if (t) dots += `<circle class="jd" cx="${t.x}" cy="${t.y}" r="3.2"/>`; } });
@@ -2000,6 +2010,19 @@
         wiring = null; hoverT = null; updHint(); render(); return;
       }
       if (tool) { drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, moved: false, place: p }; return; }
+      const vh = e.target.closest('[data-via]');
+      if (vh) {
+        const w = doc.wires.find(x => x.id === vh.dataset.via); if (!w) return; const vi = +vh.dataset.vi, now = Date.now();
+        if (now - lastViaClick.t < 400 && lastViaClick.k === w.id + ':' + vi) { pushUndo(); w.via.splice(vi, 1); if (!w.via.length) delete w.via; lastViaClick = { t: 0, k: '' }; afterChange(); return; }
+        lastViaClick = { t: now, k: w.id + ':' + vi }; pushUndo(); drag = { type: 'via', id: w.id, i: vi }; return;
+      }
+      const ah = e.target.closest('[data-addvia]');
+      if (ah) {
+        const w = doc.wires.find(x => x.id === ah.dataset.addvia), pp = w && wirePath(w); if (!pp) return;
+        pushUndo(); const k = pp.pts.slice(0, +ah.dataset.seg + 1).filter(q => !pp.stubs.some(s => s[0] === q[0] && s[1] === q[1])).length - 1;
+        w.via = pp.pts.filter((q, j) => j > 0 && j < pp.pts.length - 1 && !pp.stubs.some(s => s[0] === q[0] && s[1] === q[1]));
+        w.via.splice(k, 0, [snap(p[0]), snap(p[1])]); drag = { type: 'via', id: w.id, i: k }; render(); return;
+      }
       const mh = e.target.closest('[data-mid]');
       if (mh) { pushUndo(); drag = { type: 'mid', id: mh.dataset.mid }; return; }
       const tm = nearestTerm(p[0], p[1], Math.max(7, 9 / view.k));
@@ -2034,6 +2057,10 @@
           const p = toWorld(e); if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 4) drag.moved = true;
           wiring.cur = p; hoverT = nearestTerm(p[0], p[1], Math.max(9, 12 / view.k)); render();
         }
+        else if (drag.type === 'via') {
+          const w = doc.wires.find(x => x.id === drag.id), p = toWorld(e);
+          if (w && w.via && w.via[drag.i]) { w.via[drag.i] = [snap(p[0]), snap(p[1])]; render(); }
+        }
         else if (drag.type === 'mid') {
           const w = doc.wires.find(x => x.id === drag.id); const p = toWorld(e); const pp = wirePath(w);
           if (w && pp && pp.mid) { w.mid = snap(pp.mid.ax === 'v' ? p[1] : p[0]); render(); }
@@ -2061,7 +2088,7 @@
         }
         else { updHint(); render(); }
       }
-      else if (d.type === 'mid') afterChange();
+      else if (d.type === 'mid' || d.type === 'via') afterChange();
       else if (d.type === 'marq') {
         const x0 = Math.min(d.x0, d.x1), x1 = Math.max(d.x0, d.x1), y0 = Math.min(d.y0, d.y1), y1 = Math.max(d.y0, d.y1);
         selC = new Set(doc.comps.filter(c => { const b = cbox(c); return b[2] >= x0 && b[0] <= x1 && b[3] >= y0 && b[1] <= y1; }).map(c => c.id)); selW = null; renderPanel(); render();
