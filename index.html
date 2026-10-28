@@ -1550,9 +1550,9 @@
       (r.t || []).forEach(t => { const p = rotPt(t.x, t.y, c.rot); txt.push(`<text class="${t.c}" x="${p[0]}" y="${p[1]}" text-anchor="${t.a || 'start'}">${esc(t.s)}</text>`); });
       const tl = compTerms(c);
       T.forEach((t, i) => {
-        const l = tl[i].l; if (!l) return; const o = termLblOff(t.d); if (!o) return;
-        const q = rotPt(t.x + o[0], t.y + o[1], c.rot), ro = rotPt(o[0], o[1], c.rot);
-        const an = Math.abs(ro[0]) >= 3 ? (ro[0] > 0 ? 'start' : 'end') : 'middle';
+        const l = tl[i].l; if (!l) return; const rd = tl[i].d, o = termLblOff(rd); if (!o) return;
+        const bp = rotPt(t.x, t.y, c.rot), q = [bp[0] + o[0], bp[1] + o[1]];
+        const an = o[0] >= 3 ? 'start' : o[0] <= -3 ? 'end' : 'middle';
         txt.push(`<text class="tl" x="${q[0]}" y="${q[1]}" text-anchor="${an}">${esc(l)}</text>`);
       });
       const rb = bb, lab = dispLabel(c);
