@@ -1413,6 +1413,9 @@
 
     /* ===== Modèle ===== */
     let doc = { comps: [], wires: [], nid: 1 };
+    const WIRE_COLORS = { blue: '#2563eb', red: '#dc2626', black: '#000000', violet: '#7c3aed', green: '#16803c', yellow: '#d4a900' };
+    const WIRE_COLOR_OPTIONS = [['blue', 'Bleu'], ['red', 'Rouge'], ['black', 'Noir'], ['violet', 'Violet'], ['green', 'Vert'], ['yellow', 'Jaune']];
+    const wireStrokeColor = w => Object.prototype.hasOwnProperty.call(WIRE_COLORS, w.color) ? WIRE_COLORS[w.color] : '';
     let view = { x: 60, y: 50, k: 1 };
     let selC = new Set(), selW = null;
     let gridVisible = true;
@@ -1555,8 +1558,10 @@
       doc.wires.forEach(w => {
         const p = wirePath(w); if (!p) return;
         const d = ptsD(p.pts), isSel = selW === w.id;
+        const customColor = wireStrokeColor(w);
         let col = '', live = '';
-        if (sim && RES) { const pn = RES.potOf(w.a.c, w.a.t); if (pn.length) { live = ' live'; col = ` style="stroke:${pn.length > 1 ? 'var(--bad)' : potColor(pn[0])}"`; } }
+        if (sim && RES) { const pn = RES.potOf(w.a.c, w.a.t); if (pn.length) { live = ' live'; if (!customColor && !isSel) col = ` style="stroke:${pn.length > 1 ? 'var(--bad)' : potColor(pn[0])}"`; } }
+        if (customColor && !isSel) col = ` style="stroke:${customColor}"`;
         s += `<g data-w="${w.id}"><path class="wirehit" d="${d}"/><path class="wire${isSel ? ' sel' : ''}${live}" d="${d}"${col}/>`;
         if (w.label) { const ls = labelSpot(p.pts); s += `<text class="wl" x="${ls.x}" y="${ls.y}" text-anchor="${ls.a}">${esc(w.label)}</text>`; }
         s += '</g>';
@@ -1656,7 +1661,7 @@
         if (c.label && DEFS[c.type].pre && !DEFS[c.type].refLabel) { n.label = autoLabel(c.label.replace(/\d+$/, '')); }
         map[id] = n.id; doc.comps.push(n); ns.add(n.id);
       });
-      doc.wires.slice().forEach(w => { if (map[w.a.c] && map[w.b.c]) doc.wires.push({ id: newId('w'), a: { c: map[w.a.c], t: w.a.t }, b: { c: map[w.b.c], t: w.b.t }, label: w.label, mid: w.mid != null ? w.mid + 30 : undefined, manual: w.manual }); });
+      doc.wires.slice().forEach(w => { if (map[w.a.c] && map[w.b.c]) doc.wires.push({ id: newId('w'), a: { c: map[w.a.c], t: w.a.t }, b: { c: map[w.b.c], t: w.b.t }, label: w.label, color: w.color, mid: w.mid != null ? w.mid + 30 : undefined, manual: w.manual }); });
       selC = ns; selW = null; afterChange();
     }
 
@@ -2093,6 +2098,7 @@
           const A = byId(w.a.c), B = byId(w.b.c);
           h = `<h2>Fil</h2><p class="empty" style="margin:0">${esc(dispLabel(A) || DEFS[A.type].name)} · borne ${esc(w.a.t)} → ${esc(dispLabel(B) || DEFS[B.type].name)} · borne ${esc(w.b.t)}</p>
       ${field('Repère du fil', `<input id="wlab" value="${esc(w.label)}" placeholder="ex. 1, L1, 12…" autocomplete="off">`)}
+      ${field('Couleur', `<select id="wcolor"><option value=""${wireStrokeColor(w) ? '' : ' selected'}>Par défaut</option>${WIRE_COLOR_OPTIONS.map(([value, label]) => `<option value="${value}"${w.color === value ? ' selected' : ''}>${label}</option>`).join('')}</select>`)}
       <div class="row"><button class="tb" id="wauto" type="button">Repère automatique</button><button class="tb" id="wdel" type="button">Supprimer le fil</button></div>
       <p class="empty">Faites glisser le carré orange pour déplacer le segment central du fil.</p>`;
         }
@@ -2134,6 +2140,13 @@
     panel.addEventListener('change', e => {
       const t = e.target;
       if (t.id === 'spd') { S.speed = +t.value; return; }
+      if (t.id === 'wcolor') {
+        const w = doc.wires.find(x => x.id === selW); if (!w) return;
+        pushUndo();
+        if (Object.prototype.hasOwnProperty.call(WIRE_COLORS, t.value)) w.color = t.value;
+        else delete w.color;
+        afterChange(); return;
+      }
       if (t.tagName !== 'SELECT') return; const c = selC.size === 1 ? byId([...selC][0]) : null; if (!c || !t.dataset.k) return;
       pushUndo(); c.props[t.dataset.k] = t.dataset.num ? +t.value : t.value; if (t.dataset.k === 'kind' || t.dataset.k === 'type') c.tl = {}; afterChange();
     });
