@@ -58,6 +58,7 @@
       --fg: #14202b;
       --muted: #56667a;
       --ink: #16263a;
+      --wire: #000;
       --ink2: #5a6e82;
       --accent: #1f5fbf;
       --accent-fg: #ffffff;
@@ -89,6 +90,7 @@
         --fg: #e4ebf1;
         --muted: #8b9cac;
         --ink: #d7e3ee;
+        --wire: #d7e3ee;
         --ink2: #8aa0b5;
         --accent: #5ea4ff;
         --accent-fg: #06121f;
@@ -119,6 +121,7 @@
       --fg: #e4ebf1;
       --muted: #8b9cac;
       --ink: #d7e3ee;
+      --wire: #d7e3ee;
       --ink2: #8aa0b5;
       --accent: #5ea4ff;
       --accent-fg: #06121f;
@@ -730,7 +733,7 @@
     }
 
     .wire {
-      stroke: var(--ink);
+      stroke: var(--wire);
       stroke-width: 1.4;
       fill: none;
       stroke-linejoin: round
@@ -816,6 +819,9 @@
       border: 1px solid var(--line, #888);
       cursor: pointer;
       padding: 0;
+    }
+    .swatch.none {
+      background: repeating-linear-gradient(45deg, var(--paper, #fff) 0 4px, #bbb 4px 6px);
     }
     .swatch.on {
       outline: 2px solid var(--sel);
@@ -2202,7 +2208,7 @@
           const A = byId(w.a.c), B = byId(w.b.c);
           h = `<h2>Fil</h2><p class="empty" style="margin:0">${esc(dispLabel(A) || DEFS[A.type].name)} · borne ${esc(w.a.t)} → ${esc(dispLabel(B) || DEFS[B.type].name)} · borne ${esc(w.b.t)}</p>
       ${field('Repère du fil', `<input id="wlab" value="${esc(w.label)}" placeholder="ex. 1, L1, 12…" autocomplete="off">`)}
-      ${field('Couleur', `<select id="wcolor"><option value=""${wireStrokeColor(w) ? '' : ' selected'}>▫️ Par défaut</option>${WIRE_COLOR_OPTIONS.map(([value, label]) => `<option value="${value}"${w.color === value ? ' selected' : ''}>${label}</option>`).join('')}</select>`)}
+      ${field('Couleur', `<div class="swatches" role="group" aria-label="Couleur">${WIRE_COLOR_OPTIONS.map(([value, l]) => { const label = l.replace(/^\S+\s/, ''), on = value === 'black' ? !wireStrokeColor(w) || w.color === 'black' : w.color === value; return `<button type="button" class="swatch${on ? ' on' : ''}" data-wswatch="${value}" style="background:${WIRE_COLORS[value]}" title="${esc(label)}${value === 'black' ? ' (par défaut)' : ''}" aria-label="${esc(label)}" aria-pressed="${on}"></button>`; }).join('')}</div>`)}
       <div class="row"><button class="tb" id="wauto" type="button">Repère automatique</button><button class="tb" id="wdel" type="button">Supprimer le fil</button></div>
       <p class="empty">Faites glisser le carré orange pour déplacer le segment central du fil.</p>`;
         }
@@ -2244,18 +2250,18 @@
     panel.addEventListener('change', e => {
       const t = e.target;
       if (t.id === 'spd') { S.speed = +t.value; return; }
-      if (t.id === 'wcolor') {
-        const w = doc.wires.find(x => x.id === selW); if (!w) return;
-        pushUndo();
-        if (Object.prototype.hasOwnProperty.call(WIRE_COLORS, t.value)) w.color = t.value;
-        else delete w.color;
-        afterChange(); return;
-      }
       if (t.tagName !== 'SELECT') return; const c = selC.size === 1 ? byId([...selC][0]) : null; if (!c || !t.dataset.k) return;
       pushUndo(); c.props[t.dataset.k] = t.dataset.num ? +t.value : t.value; if (t.dataset.k === 'kind' || t.dataset.k === 'type') c.tl = {}; afterChange();
     });
     panel.addEventListener('focusout', () => { editing = false; });
     panel.addEventListener('click', e => {
+      const ws = e.target.closest('button[data-wswatch]');
+      if (ws) {
+        const w = doc.wires.find(x => x.id === selW); if (!w) return;
+        pushUndo();
+        if (ws.dataset.wswatch !== 'black' && Object.prototype.hasOwnProperty.call(WIRE_COLORS, ws.dataset.wswatch)) w.color = ws.dataset.wswatch; else delete w.color;
+        afterChange(); return;
+      }
       const sw = e.target.closest('button[data-swatch]');
       if (sw) { const c = selC.size === 1 ? byId([...selC][0]) : null; if (c) { pushUndo(); c.props.color = sw.dataset.swatch; afterChange(); } return; }
       const t = e.target.closest('button'); if (!t) return;
