@@ -804,6 +804,23 @@
       stroke-dasharray: 4 3
     }
 
+    .swatches {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: 1px solid var(--line, #888);
+      cursor: pointer;
+      padding: 0;
+    }
+    .swatch.on {
+      outline: 2px solid var(--sel);
+      outline-offset: 2px;
+    }
     .mh.add {
       opacity: .6;
     }
@@ -2123,6 +2140,9 @@
     // Génère le contrôle adapté au type d'une propriété de composant.
     function propField(c, p) {
       const v = c.props[p.k];
+      if (c.type === 'lamp' && p.k === 'color') {
+        return field(p.l, `<div class="swatches" role="group" aria-label="${p.l}">${p.o.map(([val, lb]) => `<button type="button" class="swatch${v === val ? ' on' : ''}" data-swatch="${val}" style="background:${LAMPCOL[val]}" title="${esc(lb)}" aria-label="${esc(lb)}" aria-pressed="${v === val}"></button>`).join('')}</div>`);
+      }
       if (p.t === 'sel') { return field(p.l, `<select data-k="${p.k}"${p.num ? ' data-num="1"' : ''}>${p.o.map(o => { const val = Array.isArray(o) ? o[0] : o, lb = Array.isArray(o) ? o[1] : o; return `<option value="${esc(val)}"${String(v) === String(val) ? ' selected' : ''}>${esc(lb)}</option>`; }).join('')}</select>`); }
       if (p.t === 'ref') return field(p.l, `<input data-k="${p.k}" list="dl-refs" value="${esc(v)}" autocomplete="off">`);
       if (p.t === 'pot') return field(p.l, `<input data-k="${p.k}" list="dl-pots" value="${esc(v)}" autocomplete="off">`);
@@ -2236,6 +2256,8 @@
     });
     panel.addEventListener('focusout', () => { editing = false; });
     panel.addEventListener('click', e => {
+      const sw = e.target.closest('button[data-swatch]');
+      if (sw) { const c = selC.size === 1 ? byId([...selC][0]) : null; if (c) { pushUndo(); c.props.color = sw.dataset.swatch; afterChange(); } return; }
       const t = e.target.closest('button'); if (!t) return;
       if (t.id === 'wauto') { const w = doc.wires.find(x => x.id === selW); if (w) { w.manual = false; w.label = ''; autoNumber(); } return; }
       if (t.id === 'wdel') { delSelection(); return; }
