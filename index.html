@@ -1593,7 +1593,7 @@
         s += '</g>';
         if (isSel && !sim) {
           if (w.via && w.via.length) w.via.forEach((q, i) => { hs += `<circle class="mh" data-via="${w.id}" data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="5"/>`; });
-          for (let i = 1; i < p.pts.length - 2; i++) {
+          for (let i = 0; i < p.pts.length - 1; i++) {
             const a = p.pts[i], b = p.pts[i + 1];
             if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) >= 20) hs += `<circle class="mh add" data-addvia="${w.id}" data-seg="${i}" cx="${(a[0] + b[0]) / 2}" cy="${(a[1] + b[1]) / 2}" r="3.5"/>`;
           }
