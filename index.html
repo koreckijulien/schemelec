@@ -1202,7 +1202,7 @@
       const k = P.kind || 'aux', t = P.type || 'no';
       return (k === 'aux' || k === 'sw') ? (t === 'no' ? ['13', '14'] : ['21', '22']) : k === 'tmp' ? (t === 'no' ? ['67', '68'] : ['55', '56']) : (t === 'no' ? ['97', '98'] : ['95', '96']);
     };
-    const ctcProps = [{ k: 'kind', l: 'Type de contact', t: 'sel', o: [['aux', 'Auxiliaire de contacteur ou relais'], ['tmp', 'Temporisé (relais temporisé)'], ['th', 'Relais thermique'], ['sw', 'Auxiliaire de sectionneur / disjoncteur']] },
+    const ctcProps = [{ k: 'kind', l: 'Type de contact', t: 'sel', o: [['aux', 'Auxiliaire de contacteur, relais ou télérupteur'], ['tmp', 'Temporisé (relais temporisé)'], ['th', 'Relais thermique'], ['sw', 'Auxiliaire de sectionneur / disjoncteur']] },
     { k: 'type', l: 'Fonction', t: 'sel', o: [['no', 'Normalement ouvert (NO)'], ['nc', 'Normalement fermé (NC)']] },
     { k: 'ref', l: 'Repère de l’appareil commandé', t: 'ref' }];
     DEFS.ctc = {
@@ -1291,6 +1291,15 @@
           s: ln(0, 0, 0, 21) + ln(0, 39, 0, 60) + rc(-20, 21, 40, 18, on ? 'coilon' : '') + ln(-10, 21, -10, 39, 'thin') + ln(10, 21, 10, 39, 'thin'),
           t: [{ x: 24, y: 34, s: (c.props.delay || 0) + ' s', c: 'cn', a: 'start' }]
         };
+      }
+    };
+    DEFS.telerupteur = {
+      name: 'Télérupteur', pre: 'TL', def: {}, props: [],
+      terms: c => [{ id: 'a1', x: 0, y: 0, d: [0, -1], l: 'A1' }, { id: 'a2', x: 0, y: 60, d: [0, 1], l: 'A2' }],
+      bbox: c => [-22, -2, 22, 62],
+      draw(c, cx) {
+        const on = cx && cx.sim && cx.S.coil[c.id];
+        return { s: ln(0, 0, 0, 21) + ln(0, 39, 0, 60) + rc(-20, 21, 40, 18, on ? 'coilon' : ''), t: [{ x: 0, y: 34, s: 'T', c: 'mid', a: 'middle' }] };
       }
     };
 
@@ -1407,7 +1416,7 @@
         { t: 'ctc', name: 'Contact temporisé NO', p: { kind: 'tmp', type: 'no' } }, { t: 'ctc', name: 'Contact temporisé NC', p: { kind: 'tmp', type: 'nc' } },
         { t: 'ctc', name: 'Thermique NC (95-96)', p: { kind: 'th', type: 'nc' } }, { t: 'ctc', name: 'Thermique NO (97-98)', p: { kind: 'th', type: 'no' } }]],
       ['Bobines et signalisation', [
-        { t: 'coil', name: 'Bobine de contacteur' }, { t: 'coil', name: 'Bobine de relais', l: 'KA' }, { t: 'coilt', name: 'Relais temporisé' }, { t: 'lamp', name: 'Voyant' }]],
+        { t: 'coil', name: 'Bobine de contacteur' }, { t: 'coil', name: 'Bobine de relais', l: 'KA' }, { t: 'coilt', name: 'Relais temporisé' }, { t: 'telerupteur', name: 'Télérupteur' }, { t: 'lamp', name: 'Voyant' }]],
       ['Récepteurs', [{ t: 'mot3', name: 'Moteur 3~' }, { t: 'mot3b', name: 'Moteur 3~ 6 bornes' }, { t: 'mot1', name: 'Moteur 1~' }]]
     ];
 
@@ -1708,7 +1717,12 @@
           const nc = P.type === 'nc'; let on;
           if (P.kind === 'sw') { const q = findRef(P.ref, ['sect', 'disj', 'disjmot', 'diff']); const cl = !!(q && S.sw[q.id] !== false); on = nc ? !cl : cl; }
           else if (P.kind === 'th') { const th = findRef(P.ref, ['thermal']); const tr = !!(th && S.trip[th.id]); on = nc ? !tr : tr; }
-          else { const k = findRef(P.ref, ['coil', 'coilt']); let act = !!(k && S.coil[k.id]); if (P.kind === 'tmp') act = act && !!(k && S.done[k.id]); on = nc ? !act : act; }
+          else {
+            const k = findRef(P.ref, ['coil', 'coilt', 'telerupteur']);
+            let act = !!(k && (k.type === 'telerupteur' ? S.latch[k.id] : S.coil[k.id]));
+            if (P.kind === 'tmp') act = act && !!(k && k.type === 'coilt' && S.done[k.id]);
+            on = nc ? !act : act;
+          }
           return [{ a: 'a', b: 'b', on }];
         }
         case 'btn': case 'sel': case 'lsw': { const pr = !!(S.held[c.id] || S.latch[c.id]); return [{ a: 'a', b: 'b', on: P.type === 'nc' ? !pr : pr }]; }
@@ -1792,7 +1806,7 @@
 
     // Résout l'état électrique jusqu'à stabilisation, puis calcule les résultats affichables.
     function simSolve() {
-      const coils = doc.comps.filter(c => c.type === 'coil' || c.type === 'coilt'), trs = doc.comps.filter(c => c.type === 'trafo');
+      const coils = doc.comps.filter(c => c.type === 'coil' || c.type === 'coilt' || c.type === 'telerupteur'), trs = doc.comps.filter(c => c.type === 'trafo');
       let net, guard = 0, unstable = false;
       for (; ;) {
         if (++guard > 400) { unstable = true; break; }
@@ -1801,7 +1815,15 @@
         if (sh && sh.trip) { tripDev(sh.trip); continue; }
         let ch = false;
         for (const t of trs) { const w = energized(net, t, 'p1', 'p2'); if (w !== !!S.tr[t.id]) { S.tr[t.id] = w; ch = true; break; } }
-        if (!ch) for (const c of coils) { const w = energized(net, c, 'a1', 'a2'); if (w !== !!S.coil[c.id]) { S.coil[c.id] = w; if (!w) { S.tmr[c.id] = 0; S.done[c.id] = false; } ch = true; break; } }
+        if (!ch) for (const c of coils) {
+          const w = energized(net, c, 'a1', 'a2'), wasOn = !!S.coil[c.id];
+          if (w !== wasOn) {
+            S.coil[c.id] = w;
+            if (c.type === 'telerupteur') { if (w) S.latch[c.id] = !S.latch[c.id]; }
+            else if (!w) { S.tmr[c.id] = 0; S.done[c.id] = false; }
+            ch = true; break;
+          }
+        }
         if (!ch) break;
       }
       RES = computeRes(net, unstable, findShort(net));
@@ -2067,12 +2089,13 @@
         }
         return `<div class="ctl"><div><b>${lb}</b> ${st}${c.note ? `<small>${esc(c.note)}</small>` : ''}</div>${btn}</div>`;
       }).join('') : '<p class="empty">Aucun organe de commande dans ce schéma.</p>') + '</div>';
-      const coils = doc.comps.filter(c => c.type === 'coil' || c.type === 'coilt');
+      const coils = doc.comps.filter(c => c.type === 'coil' || c.type === 'coilt' || c.type === 'telerupteur');
       if (coils.length) {
-        h += '<h2>Bobines et relais</h2><div>' + coils.map(c => {
-          const on = S.coil[c.id];
+        h += '<h2>Bobines, relais et télérupteurs</h2><div>' + coils.map(c => {
+          const on = c.type === 'telerupteur' ? !!S.latch[c.id] : S.coil[c.id];
           const bar = c.type === 'coilt' ? `<div class="bar"><i data-tbar="${c.id}" style="width:${Math.min(100, 100 * (S.tmr[c.id] || 0) / (+c.props.delay || 1))}%"></i></div>` : '';
-          return `<div class="ctl"><div><b>${esc(c.label)}</b>${c.type === 'coilt' ? ` <small style="display:inline">${c.props.delay} s</small>` : ''}${bar}</div><span class="chip${on ? ' on' : ''}">${on ? 'excitée' : 'repos'}</span></div>`;
+          const status = c.type === 'telerupteur' ? (on ? 'enclenché' : 'au repos') : (on ? 'excitée' : 'repos');
+          return `<div class="ctl"><div><b>${esc(c.label)}</b>${c.type === 'coilt' ? ` <small style="display:inline">${c.props.delay} s</small>` : ''}${bar}</div><span class="chip${on ? ' on' : ''}">${status}</span></div>`;
         }).join('') + '</div>';
       }
       const rec = doc.comps.filter(c => RES.motor[c.id] || c.type === 'lamp');
@@ -2088,7 +2111,7 @@
     // Affiche les propriétés du fil ou des composants sélectionnés.
     function renderPanel() {
       const el = $('#panel');
-      const refs = doc.comps.filter(c => ['coil', 'coilt', 'thermal'].includes(c.type)).map(c => c.label);
+      const refs = doc.comps.filter(c => ['coil', 'coilt', 'telerupteur', 'thermal'].includes(c.type)).map(c => c.label);
       const dl = `<datalist id="dl-refs">${[...new Set(refs)].map(r => `<option value="${esc(r)}">`).join('')}</datalist><datalist id="dl-pots">${POTS.map(r => `<option value="${r}">`).join('')}</datalist>`;
       if (mode === 'sim') { el.innerHTML = simPanelHtml(); renderAlerts(); return; }
       let h = '';
