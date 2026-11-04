@@ -1004,7 +1004,6 @@
         </div>
         <button class="tb" id="bIO" type="button">⇅<span class="lbl"> Export / import</span></button>
         <button class="tb" id="bNew" type="button" title="Page blanche">Nouveau</button>
-        <button class="tb" id="bInstall" type="button" title="Installer l’application">Installer</button>
       </div>
     </header>
     <div class="app">
@@ -2337,50 +2336,12 @@
     })();
   </script>
   <script>
-    (() => {
-      const installButton = document.querySelector('#bInstall');
-      let installPrompt = null;
-      const isInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-
-      if (isInstalled) installButton.hidden = true;
-
-      window.addEventListener('beforeinstallprompt', event => {
-        event.preventDefault();
-        installPrompt = event;
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+          .catch(error => console.error('Impossible d’activer le mode hors ligne de Schemelec.', error));
       });
-
-      window.addEventListener('appinstalled', () => {
-        installPrompt = null;
-        installButton.hidden = true;
-      });
-
-      installButton.addEventListener('click', async () => {
-        if (!installPrompt) {
-          const isIOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
-          alert(isIOS
-            ? 'Pour installer cette application, ouvrez le menu Partager de Safari puis choisissez « Sur l’écran d’accueil ».'
-            : 'Pour installer cette application, utilisez la commande « Installer l’application » ou « Ajouter à l’écran d’accueil » du menu de votre navigateur. L’application doit être ouverte depuis HTTPS ou localhost.');
-          return;
-        }
-
-        const prompt = installPrompt;
-        installPrompt = null;
-        try {
-          await prompt.prompt();
-          const { outcome } = await prompt.userChoice;
-          if (outcome === 'accepted') installButton.hidden = true;
-        } catch (error) {
-          console.error('Impossible de lancer l’installation de Schemelec.', error);
-        }
-      });
-
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./service-worker.js')
-            .catch(error => console.error('Impossible d’activer le mode hors ligne de Schemelec.', error));
-        });
-      }
-    })();
+    }
   </script>
 
 </body>
