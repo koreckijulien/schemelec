@@ -5,9 +5,7 @@
   "description": "Éditeur et simulateur de schémas électrotechniques.",
   "start_url": "./index.html",
   "scope": "./",
-  "display": "standalone",
-  "background_color": "#e6ebef",
-    "theme_color": "#0a6c93",
+  "display": "standalone",  
   "icons": [
     {
       "src": "./icons/icon-192.png",
@@ -18,6 +16,10 @@
       "src": "./icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
+    },{
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png", purpose: "maskable"
     },
     {
       "src": "./icons/icon.svg",
