@@ -1094,10 +1094,11 @@
       return a;
     }
     // Dessine le contact mobile selon son état simulé et sa fonction NO ou NC.
-    function blade(x, on, nc) {
+    function blade(x, on, nc, side = -1) {
+      const tip = x + side * 8;
       if (on === true) return ln(x, 40, x, 20);
-      if (on === false) return ln(x, 40, x - 8, 20);
-      return nc ? ln(x, 40, x - 8, 20) + ln(x - 8, 20, x, 20) : ln(x, 40, x - 8, 20);
+      if (on === false) return ln(x, 40, tip, 20);
+      return nc ? ln(x, 40, tip, 20) + ln(tip, 20, x, 20) : ln(x, 40, tip, 20);
     }
 
     // Renvoie l'état simulé de chacun des pôles, ou null hors simulation.
@@ -1236,8 +1237,10 @@
       bbox: c => [-30, -2, 16, 62],
       draw(c, cx) {
         const P = c.props, st = onList(c, cx), nc = P.type === 'nc';
+        const timer = P.kind === 'tmp' ? findRef(P.ref, ['coilt']) : null;
+        const rest = timer && timer.props.mode === 'rest';
         let s = ln(0, 0, 0, 20) + ln(0, 40, 0, 60) + blade(0, st ? st[0] : undefined, nc) + ln(-4, 30, -9, 30, 'dash');
-        if (P.kind === 'tmp') s += pa('M-12,23 A9,9 0 0 1 -12,37');
+        if (P.kind === 'tmp') s += pa(`M-12,23 A9,9 0 0 ${rest ? 1 : 0} -12,37`);
         else if (P.kind === 'th') s += rc(-18, 25, 9, 10);
         else if (P.kind === 'sw') s += ln(-9, 24, -9, 36) + ln(-9, 30, -16, 30) + ci(-18, 30, 2);
         return { s, t: [] };
@@ -1307,7 +1310,7 @@
       }
     };
     DEFS.coilt = {
-      name: 'Relais temporisé (travail)', pre: 'KT', def: { delay: 5 }, props: [{ k: 'delay', l: 'Temporisation (s)', t: 'num' }],
+      name: 'Relais temporisé', pre: 'KT', def: { mode: 'work', delay: 5, offDelay: 0 }, props: [{ k: 'mode', l: 'Mode de temporisation', t: 'sel', o: [['work', 'Travail (retard à l’enclenchement)'], ['rest', 'Repos (retard au déclenchement)']] }, { k: 'delay', l: 'Retard à l’enclenchement (s)', t: 'num' }, { k: 'offDelay', l: 'Retard au déclenchement (s)', t: 'num' }],
       terms: c => [{ id: 'a1', x: 0, y: 0, d: [0, -1], l: 'A1' }, { id: 'a2', x: 0, y: 60, d: [0, 1], l: 'A2' }],
       bbox: c => [-22, -2, 22, 62],
       draw(c, cx) {
@@ -1739,7 +1742,7 @@
 
     /* ===== Moteur de simulation (réseau de contacts, relais à retard) ===== */
     // Crée l'état initial de tous les organes et indicateurs de la simulation.
-    const freshS = () => ({ sw: {}, blown: {}, held: {}, latch: {}, pos: {}, trip: {}, coil: {}, tmr: {}, done: {}, timer: {}, timerInput: {}, tr: {}, log: [], speed: 1 });
+    const freshS = () => ({ sw: {}, blown: {}, held: {}, latch: {}, pos: {}, trip: {}, coil: {}, tmr: {}, toff: {}, done: {}, timer: {}, timerInput: {}, tr: {}, log: [], speed: 1 });
     let S = freshS();
     let RES = { lamp: {}, motor: {}, alerts: [], potOf: () => [] };
     const PH = ['L1', 'L2', 'L3'];
@@ -1766,7 +1769,7 @@
           else {
             const k = findRef(P.ref, ['coil', 'coilt', 'telerupteur', 'minuterie']);
             let act = !!(k && (k.type === 'telerupteur' ? S.latch[k.id] : k.type === 'minuterie' ? S.timer[k.id] > 0 : S.coil[k.id]));
-            if (P.kind === 'tmp') act = act && !!(k && k.type === 'coilt' && S.done[k.id]);
+            if (P.kind === 'tmp') act = !!(k && k.type === 'coilt' && S.done[k.id]);
             on = nc ? !act : act;
           }
           return [{ a: 'a', b: 'b', on }];
@@ -1872,6 +1875,14 @@
           if (w !== wasOn) {
             S.coil[c.id] = w;
             if (c.type === 'telerupteur') { if (w) S.latch[c.id] = !S.latch[c.id]; }
+            else if (c.type === 'coilt') {
+              if (w) S.toff[c.id] = 0;
+              else {
+                S.tmr[c.id] = 0;
+                S.toff[c.id] = 0;
+                if (!(+c.props.offDelay > 0)) S.done[c.id] = false;
+              }
+            }
             else if (!w) { S.tmr[c.id] = 0; S.done[c.id] = false; }
             ch = true; break;
           }
@@ -1954,7 +1965,10 @@
       doc.comps.forEach(c => {
         if (c.type === 'coilt' && S.coil[c.id] && !S.done[c.id]) {
           run = true; S.tmr[c.id] = (S.tmr[c.id] || 0) + dt;
-          if (S.tmr[c.id] >= (+c.props.delay || 0)) { S.done[c.id] = true; ch = true; }
+          if (S.tmr[c.id] >= (+c.props.delay || 0)) { S.done[c.id] = true; S.toff[c.id] = 0; ch = true; }
+        } else if (c.type === 'coilt' && !S.coil[c.id] && S.done[c.id] && +c.props.offDelay > 0) {
+          run = true; S.toff[c.id] = (S.toff[c.id] || 0) + dt;
+          if (S.toff[c.id] >= +c.props.offDelay) { S.done[c.id] = false; S.toff[c.id] = 0; ch = true; }
         } else if (c.type === 'minuterie' && S.timer[c.id] > 0) {
           run = true; S.timer[c.id] = Math.max(0, S.timer[c.id] - dt);
           if (S.timer[c.id] === 0) ch = true;
@@ -1962,7 +1976,15 @@
       });
       if (ch) simRefresh();
       else if (run) doc.comps.forEach(c => {
-        if (c.type === 'coilt') { const el = document.querySelector(`[data-tbar="${c.id}"]`); if (el) { const d = +c.props.delay || 1; el.style.width = Math.min(100, 100 * (S.tmr[c.id] || 0) / d) + '%'; } }
+        if (c.type === 'coilt') {
+          const el = document.querySelector(`[data-tbar="${c.id}"]`);
+          if (el) {
+            const dropping = !S.coil[c.id] && S.done[c.id];
+            const d = dropping ? (+c.props.offDelay || 1) : (+c.props.delay || 1);
+            const t = dropping ? S.toff[c.id] : S.tmr[c.id];
+            el.style.width = Math.min(100, 100 * (t || 0) / d) + '%';
+          }
+        }
         if (c.type === 'minuterie' && S.timer[c.id] > 0) {
           const d = +c.props.delay || 1;
           const bar = document.querySelector(`[data-timer-bar="${c.id}"]`);
@@ -2144,7 +2166,7 @@
     function field(label, inner) { return `<div class="fld"><label>${label}</label>${inner}</div>`; }
     // Génère le contrôle adapté au type d'une propriété de composant.
     function propField(c, p) {
-      const v = c.props[p.k];
+      const v = c.type === 'coilt' && c.props[p.k] == null ? ({ mode: 'work', offDelay: 0 }[p.k] ?? c.props[p.k]) : c.props[p.k];
       if (c.type === 'lamp' && p.k === 'color') {
         return field(p.l, `<div class="swatches" role="group" aria-label="${p.l}">${p.o.map(([val, lb]) => `<button type="button" class="swatch${v === val ? ' on' : ''}" data-swatch="${val}" style="background:${LAMPCOL[val]}" title="${esc(lb)}" aria-label="${esc(lb)}" aria-pressed="${v === val}"></button>`).join('')}</div>`);
       }
@@ -2176,12 +2198,17 @@
       const coils = doc.comps.filter(c => c.type === 'coil' || c.type === 'coilt' || c.type === 'telerupteur' || c.type === 'minuterie');
       if (coils.length) {
         h += '<h2>Bobines, relais, télérupteurs et minuteries</h2><div>' + coils.map(c => {
-          const on = c.type === 'telerupteur' ? !!S.latch[c.id] : c.type === 'minuterie' ? S.timer[c.id] > 0 : S.coil[c.id];
-          const bar = c.type === 'coilt' ? `<div class="bar"><i data-tbar="${c.id}" style="width:${Math.min(100, 100 * (S.tmr[c.id] || 0) / (+c.props.delay || 1))}%"></i></div>` : '';
+          const on = c.type === 'coilt' ? !!S.done[c.id] : c.type === 'telerupteur' ? !!S.latch[c.id] : c.type === 'minuterie' ? S.timer[c.id] > 0 : S.coil[c.id];
+          const delay = Math.max(0, +c.props.delay || 0), offDelay = Math.max(0, +c.props.offDelay || 0);
+          const dropping = c.type === 'coilt' && !S.coil[c.id] && S.done[c.id];
+          const progress = dropping ? 100 * (S.toff[c.id] || 0) / (offDelay || 1) : 100 * (S.tmr[c.id] || 0) / (delay || 1);
+          const bar = c.type === 'coilt' ? `<div class="bar"><i data-tbar="${c.id}" style="width:${Math.min(100, progress)}%"></i></div>` : '';
           const timerBar = c.type === 'minuterie' ? `<div class="bar"><i data-timer-bar="${c.id}" style="width:${Math.min(100, 100 * (S.timer[c.id] || 0) / (+c.props.delay || 1))}%"></i></div>` : '';
-          const status = c.type === 'telerupteur' ? (on ? 'enclenché' : 'au repos') :
+          const status = c.type === 'coilt' ? (S.coil[c.id] ? (S.done[c.id] ? 'excitée' : 'retard à l’enclenchement') : S.done[c.id] ? 'retard au déclenchement' : 'au repos') :
+            c.type === 'telerupteur' ? (on ? 'enclenché' : 'au repos') :
             c.type === 'minuterie' ? (on ? `<span data-timer-status="${c.id}">${(S.timer[c.id] || 0).toFixed(1)} s restantes</span>` : 'au repos') : (on ? 'excitée' : 'repos');
-          return `<div class="ctl"><div><b>${esc(c.label)}</b>${c.type === 'coilt' || c.type === 'minuterie' ? ` <small style="display:inline">${c.props.delay} s</small>` : ''}${bar}${timerBar}</div><span class="chip${on ? ' on' : ''}">${status}</span></div>`;
+          const delayLabel = c.type === 'coilt' ? ` <small style="display:inline">Encl. ${delay} s · décl. ${offDelay} s</small>` : c.type === 'minuterie' ? ` <small style="display:inline">${c.props.delay} s</small>` : '';
+          return `<div class="ctl"><div><b>${esc(c.label)}</b>${delayLabel}${bar}${timerBar}</div><span class="chip${on ? ' on' : ''}">${status}</span></div>`;
         }).join('') + '</div>';
       }
       const rec = doc.comps.filter(c => RES.motor[c.id] || c.type === 'lamp');
