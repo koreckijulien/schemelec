@@ -1226,11 +1226,12 @@
     // Choisit les repères de bornes correspondant au type de contact.
     const ctcNums = P => {
       const k = P.kind || 'aux', t = P.type || 'no';
-      return (k === 'aux' || k === 'sw') ? (t === 'no' ? ['13', '14'] : ['21', '22']) : k === 'tmp' ? (t === 'no' ? ['67', '68'] : ['55', '56']) : (t === 'no' ? ['97', '98'] : ['95', '96']);
+      return (k === 'aux' || k === 'sw' || k === 'push') ? (t === 'no' ? ['13', '14'] : ['21', '22']) : k === 'tmp' ? (t === 'no' ? ['67', '68'] : ['55', '56']) : (t === 'no' ? ['97', '98'] : ['95', '96']);
     };
-    const ctcProps = [{ k: 'kind', l: 'Type de contact', t: 'sel', o: [['aux', 'Auxiliaire de contacteur, relais, télérupteur ou minuterie'], ['tmp', 'Temporisé (relais temporisé)'], ['th', 'Relais thermique'], ['sw', 'Auxiliaire de sectionneur / disjoncteur']] },
-    { k: 'type', l: 'Fonction', t: 'sel', o: [['no', 'Normalement ouvert (NO)'], ['nc', 'Normalement fermé (NC)']] },
-    { k: 'ref', l: 'Repère de l’appareil commandé', t: 'ref' }];
+    const ctcProps = [
+      { k: 'type', l: 'Fonction', t: 'sel', o: [['no', 'Normalement ouvert (NO)'], ['nc', 'Normalement fermé (NC)']] },
+      { k: 'ref', l: 'Appareil commandé', t: 'device' }
+    ];
     DEFS.ctc = {
       name: 'Contact auxiliaire', refLabel: true, def: { kind: 'aux', type: 'no', ref: '' }, props: ctcProps,
       terms: c => { const n = ctcNums(c.props); return [{ id: 'a', x: 0, y: 0, d: [0, -1], l: n[0] }, { id: 'b', x: 0, y: 60, d: [0, 1], l: n[1] }]; },
@@ -1450,6 +1451,7 @@
         { t: 'estop', name: 'Arrêt d’urgence' }, { t: 'sel', name: 'Sélecteur 2 positions' }, { t: 'sel3', name: 'Sélecteur 3 positions' }, { t: 'lsw', name: 'Fin de course' }]],
       ['Contacts auxiliaires', [
         { t: 'ctc', name: 'Contact auxiliaire NO', p: { kind: 'aux', type: 'no' } }, { t: 'ctc', name: 'Contact auxiliaire NC', p: { kind: 'aux', type: 'nc' } },
+        { t: 'ctc', name: 'Contact de bouton-poussoir NO', p: { kind: 'push', type: 'no' } }, { t: 'ctc', name: 'Contact de bouton-poussoir NC', p: { kind: 'push', type: 'nc' } },
         { t: 'ctc', name: 'Contact temporisé NO', p: { kind: 'tmp', type: 'no' } }, { t: 'ctc', name: 'Contact temporisé NC', p: { kind: 'tmp', type: 'nc' } },
         { t: 'ctc', name: 'Thermique NC (95-96)', p: { kind: 'th', type: 'nc' } }, { t: 'ctc', name: 'Thermique NO (97-98)', p: { kind: 'th', type: 'no' } }]],
       ['Bobines et signalisation', [
@@ -1687,11 +1689,25 @@
     function autoLabel(pre) { if (!pre) return ''; let n = 1; const used = new Set(doc.comps.map(c => c.label)); while (used.has(pre + n)) n++; return pre + n; }
     // Renvoie le repère de la dernière bobine ou du dernier relais temporisé ajouté.
     function lastCoilLabel() { for (let i = doc.comps.length - 1; i >= 0; i--) { const c = doc.comps[i]; if (c.type === 'coil' || c.type === 'coilt') return c.label; } return ''; }
+    const contactKindForDevice = type => ({
+      coil: 'aux', coilt: 'tmp', telerupteur: 'aux', minuterie: 'aux',
+      btn: 'push', estop: 'push', thermal: 'th',
+      sect: 'sw', disj: 'sw', disjmot: 'sw', diff: 'sw'
+    })[type];
+    const contactDeviceTypes = kind => ({
+      aux: ['coil', 'coilt', 'telerupteur', 'minuterie'], tmp: ['coilt'],
+      push: ['btn', 'estop'], th: ['thermal'], sw: ['sect', 'disj', 'disjmot', 'diff']
+    })[kind] || [];
     // Crée un composant, initialise ses propriétés et l'ajoute au schéma.
     function addComp(type, x, y, o) {
       o = o || {}; const D = DEFS[type];
       const c = { id: newId('c'), type, x, y, rot: o.rot || 0, label: o.label != null ? o.label : autoLabel(o.pre || D.pre), note: o.note || '', props: Object.assign({}, D.def, o.p || {}), tl: {} };
-      if (D.refLabel && !c.props.ref) c.props.ref = lastCoilLabel();
+      if (D.refLabel && !c.props.ref) {
+        if (type === 'ctc') {
+          const target = doc.comps.slice().reverse().find(d => d.label && contactKindForDevice(d.type) === c.props.kind);
+          if (target && doc.comps.filter(d => d.label === target.label && contactDeviceTypes(c.props.kind).includes(d.type)).length === 1) c.props.ref = target.label;
+        } else c.props.ref = lastCoilLabel();
+      }
       doc.comps.push(c); return c;
     }
     // Crée un fil entre deux bornes, en ignorant les doublons et les auto-connexions.
@@ -1754,6 +1770,7 @@
     }
     // Cherche un composant portant le repère indiqué et dont le type est autorisé.
     const findRef = (ref, types) => ref ? doc.comps.find(c => types.includes(c.type) && c.label === ref) : null;
+    const pushActuated = c => !!(S.held[c.id] || S.latch[c.id]);
     // Détermine les pôles conducteurs selon l'état de simulation des composants.
     function polesOf(c) {
       const P = c.props;
@@ -1766,6 +1783,7 @@
           const nc = P.type === 'nc'; let on;
           if (P.kind === 'sw') { const q = findRef(P.ref, ['sect', 'disj', 'disjmot', 'diff']); const cl = !!(q && S.sw[q.id] !== false); on = nc ? !cl : cl; }
           else if (P.kind === 'th') { const th = findRef(P.ref, ['thermal']); const tr = !!(th && S.trip[th.id]); on = nc ? !tr : tr; }
+          else if (P.kind === 'push') { const push = findRef(P.ref, ['btn', 'estop']); const act = !!(push && pushActuated(push)); on = nc ? !act : act; }
           else {
             const k = findRef(P.ref, ['coil', 'coilt', 'telerupteur', 'minuterie']);
             let act = !!(k && (k.type === 'telerupteur' ? S.latch[k.id] : k.type === 'minuterie' ? S.timer[k.id] > 0 : S.coil[k.id]));
@@ -1774,10 +1792,10 @@
           }
           return [{ a: 'a', b: 'b', on }];
         }
-        case 'btn': case 'sel': case 'lsw': { const pr = !!(S.held[c.id] || S.latch[c.id]); return [{ a: 'a', b: 'b', on: P.type === 'nc' ? !pr : pr }]; }
+        case 'btn': case 'sel': case 'lsw': { const pr = pushActuated(c); return [{ a: 'a', b: 'b', on: P.type === 'nc' ? !pr : pr }]; }
         case 'inter': return [{ a: 'a', b: 'b', on: !!S.latch[c.id] }];
         case 'vaetvient': { const pos = S.pos[c.id] | 0; return [{ a: 'com', b: 'nav1', on: pos === 0 }, { a: 'com', b: 'nav2', on: pos === 1 }]; }
-        case 'estop': return [{ a: 'a', b: 'b', on: !S.latch[c.id] }];
+        case 'estop': return [{ a: 'a', b: 'b', on: !pushActuated(c) }];
         case 'sel3': { const p = S.pos[c.id] | 0; return [{ a: 'a1', b: 'b1', on: p === 1 }, { a: 'a2', b: 'b2', on: p === 2 }]; }
         case 'bornier': return [{ a: 'a', b: 'b', on: true }];
       }return [];
@@ -1928,7 +1946,10 @@
       S.log.slice(-3).forEach(m => res.alerts.push({ k: 'bad', m }));
       if (sh && sh.unprot) res.alerts.push({ k: 'bad', m: 'Court-circuit entre ' + sh.pots.join(' et ') + ' : aucun dispositif de protection sur le trajet' });
       if (unstable) res.alerts.push({ k: 'warn', m: 'Commande instable : les contacts oscillent (vibration)' });
-      doc.comps.forEach(c => { if (DEFS[c.type].refLabel && !c.props.ref) res.alerts.push({ k: 'warn', m: 'Un contact n’a pas de repère de bobine (point d’interrogation)' }); });
+      doc.comps.forEach(c => {
+        if (DEFS[c.type].refLabel && !c.props.ref) res.alerts.push({ k: 'warn', m: 'Un contact n’a pas de repère d’appareil (point d’interrogation)' });
+        else if (c.type === 'ctc' && c.props.kind === 'push' && !findRef(c.props.ref, ['btn', 'estop'])) res.alerts.push({ k: 'warn', m: `Aucun bouton-poussoir ou arrêt d’urgence trouvé pour le contact « ${c.props.ref} »` });
+      });
       const seen = new Set(); res.alerts = res.alerts.filter(a => !seen.has(a.m) && seen.add(a.m));
       return res;
     }
@@ -2171,6 +2192,18 @@
         return field(p.l, `<div class="swatches" role="group" aria-label="${p.l}">${p.o.map(([val, lb]) => `<button type="button" class="swatch${v === val ? ' on' : ''}" data-swatch="${val}" style="background:${LAMPCOL[val]}" title="${esc(lb)}" aria-label="${esc(lb)}" aria-pressed="${v === val}"></button>`).join('')}</div>`);
       }
       if (p.t === 'sel') { return field(p.l, `<select data-k="${p.k}"${p.num ? ' data-num="1"' : ''}>${p.o.map(o => { const val = Array.isArray(o) ? o[0] : o, lb = Array.isArray(o) ? o[1] : o; return `<option value="${esc(val)}"${String(v) === String(val) ? ' selected' : ''}>${esc(lb)}</option>`; }).join('')}</select>`); }
+      if (p.t === 'device') {
+        const devices = doc.comps.filter(d => d.label && contactKindForDevice(d.type));
+        const current = devices.find(d => d.label === v && contactDeviceTypes(c.props.kind || 'aux').includes(d.type));
+        const missing = v && !current ? `<option value="" selected disabled>Repère « ${esc(v)} » introuvable ou incompatible</option>` : '';
+        const options = devices.map(d => {
+          const kind = contactKindForDevice(d.type);
+          const ambiguous = devices.filter(other => other.label === d.label && contactDeviceTypes(kind).includes(other.type)).length > 1;
+          const legacy = d === current && c.props.kind === 'aux' && d.type === 'coilt';
+          return `<option value="${esc(d.id)}"${d === current ? ' selected' : ''}${ambiguous ? ' disabled' : ''}>${esc(d.label)} — ${esc(DEFS[d.type].name)}${legacy ? ' (contact instantané existant)' : ''}${ambiguous ? ' (repère en double)' : ''}</option>`;
+        }).join('');
+        return field(p.l, `<select data-device="1"><option value=""${!v ? ' selected' : ''}>Aucun appareil</option>${missing}${options}</select>`);
+      }
       if (p.t === 'ref') return field(p.l, `<input data-k="${p.k}" list="dl-refs" value="${esc(v)}" autocomplete="off">`);
       if (p.t === 'pot') return field(p.l, `<input data-k="${p.k}" list="dl-pots" value="${esc(v)}" autocomplete="off">`);
       if (p.t === 'num') return field(p.l, `<input type="number" step="any" data-k="${p.k}" data-num="1" value="${esc(v)}">`);
@@ -2224,7 +2257,7 @@
     // Affiche les propriétés du fil ou des composants sélectionnés.
     function renderPanel() {
       const el = $('#panel');
-      const refs = doc.comps.filter(c => ['coil', 'coilt', 'telerupteur', 'minuterie', 'thermal'].includes(c.type)).map(c => c.label);
+      const refs = doc.comps.filter(c => ['coil', 'coilt', 'telerupteur', 'minuterie', 'thermal', 'btn', 'estop'].includes(c.type)).map(c => c.label);
       const dl = `<datalist id="dl-refs">${[...new Set(refs)].map(r => `<option value="${esc(r)}">`).join('')}</datalist><datalist id="dl-pots">${POTS.map(r => `<option value="${r}">`).join('')}</datalist>`;
       if (mode === 'sim') { el.innerHTML = simPanelHtml(); renderAlerts(); return; }
       let h = '';
@@ -2255,7 +2288,7 @@
     <p style="margin:0 0 8px"><b>3.</b> « Numéroter les fils » donne un même numéro à tous les fils d’un même potentiel.</p>
     <p style="margin:0 0 8px"><b>4.</b> Passez en <b>Simulation</b> pour presser les boutons et voir les contacteurs, le moteur et les protections réagir.</p>
     <p style="margin:0"><kbd>R</kbd> pivoter · <kbd>Suppr</kbd> effacer · <kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler · <kbd>Maj</kbd>+glisser : sélection · <kbd>Échap</kbd> annuler</p></div>
-    <h2>Légende des repères</h2><p class="empty" style="margin:0">Un contact ou une bobine est relié à son appareil par le <b>repère</b> : un contact « KM1 » suit la bobine « KM1 ». Les contacts thermiques suivent le relais thermique (« F2 »).</p>`;
+    <h2>Légende des repères</h2><p class="empty" style="margin:0">Un contact est relié à son appareil par le <b>repère</b> : un contact « KM1 » suit la bobine « KM1 ». Un contact de bouton-poussoir ou d’arrêt d’urgence suit l’organe portant le même repère. Les contacts thermiques suivent le relais thermique (« F2 »).</p>`;
       }
       el.innerHTML = h + dl; renderAlerts();
     }
@@ -2276,6 +2309,16 @@
     panel.addEventListener('change', e => {
       const t = e.target;
       if (t.id === 'spd') { S.speed = +t.value; return; }
+      if (t.tagName === 'SELECT' && t.dataset.device) {
+        const c = selC.size === 1 ? byId([...selC][0]) : null;
+        if (!c || c.type !== 'ctc') return;
+        const target = t.value ? byId(t.value) : null;
+        if (t.value && (!target || !target.label || !contactKindForDevice(target.type))) throw new Error('Appareil de contact invalide');
+        pushUndo();
+        c.props.ref = target ? target.label : '';
+        if (target && c.props.kind !== contactKindForDevice(target.type)) { c.props.kind = contactKindForDevice(target.type); c.tl = {}; }
+        afterChange(); return;
+      }
       if (t.tagName !== 'SELECT') return; const c = selC.size === 1 ? byId([...selC][0]) : null; if (!c || !t.dataset.k) return;
       pushUndo(); c.props[t.dataset.k] = t.dataset.num ? +t.value : t.value; if (t.dataset.k === 'kind' || t.dataset.k === 'type') c.tl = {}; afterChange();
     });
